@@ -2,7 +2,9 @@ package hex.tree.xgboost;
 
 import hex.*;
 import hex.genmodel.utils.DistributionFamily;
+import hex.glm.GLM;
 import hex.glm.GLMTask;
+import hex.tree.PlattScalingHelper;
 import hex.tree.TreeUtils;
 import hex.tree.xgboost.rabit.RabitTrackerH2O;
 import hex.tree.xgboost.util.FeatureScore;
@@ -30,7 +32,8 @@ import static water.H2O.technote;
  *
  *  Based on "Elements of Statistical Learning, Second Edition, page 387"
  */
-public class XGBoost extends ModelBuilder<XGBoostModel,XGBoostModel.XGBoostParameters,XGBoostOutput> {
+public class XGBoost extends ModelBuilder<XGBoostModel,XGBoostModel.XGBoostParameters,XGBoostOutput> 
+    implements PlattScalingHelper.ModelBuilderWithCalibration<XGBoostModel, XGBoostModel.XGBoostParameters, XGBoostOutput> {
 
   private static final double FILL_RATIO_THRESHOLD = 0.25D;
 
@@ -201,6 +204,18 @@ public class XGBoost extends ModelBuilder<XGBoostModel,XGBoostModel.XGBoostParam
     if ((_train != null) && (_parms._monotone_constraints != null)) {
       TreeUtils.checkMonotoneConstraints(this, _train, _parms._monotone_constraints);
     }
+
+    PlattScalingHelper.initCalibration(this, _parms, expensive);
+  }
+
+  @Override
+  public Frame getCalibrationFrame() {
+    return null;
+  }
+
+  @Override
+  public void setCalibrationFrame(Frame f) {
+
   }
 
   static DataInfo makeDataInfo(Frame train, Frame valid, XGBoostModel.XGBoostParameters parms, int nClasses) {
@@ -514,8 +529,16 @@ public class XGBoost extends ModelBuilder<XGBoostModel,XGBoostModel.XGBoostParam
         scored = true;
       }
 
+      PlattScalingHelper.buildCalibrationModel(finalScoring, XGBoost.this, _parms, _job, model);
+
       return scored;
     }
+  }
+
+  @Override
+  public void setCalibrationOutput(GLM calibBuilder, XGBoostModel model) {
+    model._output._calib_model = calibBuilder.trainModel().get();
+    model.update(_job);
   }
 
   private static TwoDimTable createVarImpTable(String name, double[] rel_imp, String[] coef_names) {

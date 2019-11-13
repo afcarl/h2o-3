@@ -463,6 +463,18 @@ public abstract class Model<M extends Model<M,P,O>, P extends Model.Parameters, 
       xs ^= (train() == null ? 43 : train().checksum()) * (valid() == null ? 17 : valid().checksum());
       return xs;
     }
+
+    public boolean isCVModel() {
+      return _is_cv_model;
+    }
+
+    public String weightsColumn() {
+      return _weights_column;
+    }
+
+    public String responseColumn() {
+      return _response_column;
+    }
   }
 
   public ModelMetrics addModelMetrics(final ModelMetrics mm) {
