@@ -210,7 +210,16 @@ function() {
 
         strict_version_check = FALSE
     } else {
-        stop(paste0("Unrecognized test type. Must be of type rdemo, runit, or rbooklet, but got: ", TEST.NAME)) }
+        stop(paste0("Unrecognized test type. Must be of type rdemo, runit, or rbooklet, but got: ", TEST.NAME)) 
+    }
+    
+    if (!is.na(USERNAME)) {
+        Log.info(paste0("Authenticating with http-basic, username: ", USERNAME, "."))
+    } else if (!is.na(KERB.PRINCIPAL)) {
+        Log.info(paste0("Authenticating with spnego, principal: ", KERB.PRINCIPAL, "."))
+    } else {
+        Log.info(paste0("Connecting without any authentication."))
+    }
 
     cat(sprintf("[%s] %s\n", Sys.time(), paste0("Connect to h2o on IP: ",H2O.IP,", PORT: ",H2O.PORT)))
     h2o.init(ip = H2O.IP, port = H2O.PORT, startH2O = FALSE,
