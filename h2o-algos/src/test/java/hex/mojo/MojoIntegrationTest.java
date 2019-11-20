@@ -17,11 +17,11 @@ import java.io.IOException;
 
 import static org.junit.Assert.*;
 
-public class MojoIntegrationTest {
+public class MojoIntegrationTest extends TestUtil {
 
   @Before
   public void setUp() throws Exception {
-    TestUtil.stall_till_cloudsize(1);
+    stall_till_cloudsize(1);
   }
 
 

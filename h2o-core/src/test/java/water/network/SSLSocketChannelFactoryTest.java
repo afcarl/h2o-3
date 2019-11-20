@@ -1,6 +1,7 @@
 package water.network;
 
 import org.junit.Test;
+import water.TestBase;
 import water.util.FileUtils;
 import water.util.StringUtils;
 
@@ -17,7 +18,7 @@ import java.util.concurrent.CyclicBarrier;
 import static org.junit.Assert.*;
 import static water.util.FileUtils.*;
 
-public class SSLSocketChannelFactoryTest {
+public class SSLSocketChannelFactoryTest extends TestBase {
 
     private int port = 9999;
 
