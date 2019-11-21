@@ -392,7 +392,7 @@ class ModelBase(backwards_compatible(Keyed)):
 
     def ntrees_actual(self):
         """
-        Returns actual number of trees in GBM model. If early stopping enabled, GBM can reset the ntrees value.
+        Returns actual number of trees in a tree model. If early stopping enabled, GBM can reset the ntrees value.
         In this case, the actual ntrees value is less than the original ntrees value a user set before
         building the model.
     

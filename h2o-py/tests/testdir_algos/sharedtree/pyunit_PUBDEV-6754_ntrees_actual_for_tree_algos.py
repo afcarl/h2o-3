@@ -37,7 +37,7 @@ def tree_algos_ntree_actual():
   print(prostate_if.ntrees_actual())
 
   assert prostate_if.ntrees_actual() < ntrees_original
-  assert prostate_if.ntrees_actual() == prostate_if._model_json['output']['model_summary']['number_of_trees'][0] == prostate_gbm.summary()['number_of_trees'][0]
+  assert prostate_if.ntrees_actual() == prostate_if._model_json['output']['model_summary']['number_of_trees'][0] == prostate_if.summary()['number_of_trees'][0]
 
   prostate_drf = H2ORandomForestEstimator(ntrees=ntrees_original, max_depth=20, min_rows=10, stopping_metric="auc", stopping_tolerance=0.01, stopping_rounds=5)
   prostate_drf.train(x=list(range(2,9)), y=1, training_frame=prostate)
@@ -49,7 +49,7 @@ def tree_algos_ntree_actual():
   print(prostate_drf.ntrees_actual())
 
   assert prostate_drf.ntrees_actual() < ntrees_original
-  assert prostate_drf.ntrees_actual() == prostate_drf._model_json['output']['model_summary']['number_of_trees'][0] == prostate_gbm.summary()['number_of_trees'][0]
+  assert prostate_drf.ntrees_actual() == prostate_drf._model_json['output']['model_summary']['number_of_trees'][0] == prostate_drf.summary()['number_of_trees'][0]
 
   prostate_xgb = H2OXGBoostEstimator(distribution="auto", ntrees=ntrees_original, seed=1, stopping_metric="auc", stopping_tolerance=0.01, stopping_rounds=5)
   prostate_xgb.train(x=list(range(2,9)), y=1, training_frame=prostate)
@@ -61,7 +61,7 @@ def tree_algos_ntree_actual():
   print(prostate_xgb.ntrees_actual())
 
   assert prostate_xgb.ntrees_actual() < ntrees_original
-  assert prostate_xgb.ntrees_actual() == prostate_xgb._model_json['output']['model_summary']['number_of_trees'][0] == prostate_gbm.summary()['number_of_trees'][0]
+  assert prostate_xgb.ntrees_actual() == prostate_xgb._model_json['output']['model_summary']['number_of_trees'][0] == prostate_xgb.summary()['number_of_trees'][0]
 
 if __name__ == "__main__":
   pyunit_utils.standalone_test(tree_algos_ntree_actual)
