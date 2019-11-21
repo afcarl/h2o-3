@@ -22,6 +22,7 @@ import hex.optimization.L_BFGS.Result;
 import hex.optimization.OptimizationUtils.*;
 import hex.util.LinearAlgebraUtils;
 import hex.util.LinearAlgebraUtils.BMulTask;
+import hex.util.LinearAlgebraUtils.FindMaxIndex;
 import jsr166y.CountedCompleter;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
@@ -32,6 +33,7 @@ import water.fvec.InteractionWrappedVec;
 import water.fvec.Vec;
 import water.parser.BufferedString;
 import water.util.*;
+import water.fvec.Chunk;
 
 import java.text.DecimalFormat;
 import java.text.NumberFormat;
@@ -875,7 +877,8 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
     }
     
     private double[] fitCoeffs(int[] randCatLevels, int totRandCatLevels, Frame returnFrame, int[] dinfoWCol, int[] wCol, 
-                           int etaOColIndexReturnFrame, int dinfoResponseColID, double[] sumEtaInfo, Frame augXZ, CalculateAugXZ calculateAugXZ) {
+                           int etaOColIndexReturnFrame, int dinfoResponseColID, double[] sumEtaInfo, Frame augXZ, 
+                               CalculateAugXZ calculateAugXZ, double[][] cholR) {
       /* Frame augXZ = makeZeroOrOneFrame(_dinfo._adaptedFrame.numRows() + ArrayUtils.sum(_randC), 
               _state.beta().length + _state.ubeta().length, 0, null); */
       Frame qMatrix=makeZeroOrOneFrame(_dinfo._adaptedFrame.numRows() + ArrayUtils.sum(_randC),
@@ -894,7 +897,7 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
               _state.get_phi(), _state.get_priorw_wpsi(), _state.get_tau(), _state.ubeta()).doAll(augXZ);
       
       do {  // start loop GLM.MME loop
-        start_delta = calculate_all_beta(start_delta, augXZ, augZW, totRandCatLevels); // calculate new coefficients
+        start_delta = calculate_all_beta(start_delta, augXZ, augZW, totRandCatLevels, cholR); // calculate new coefficients
         new CopyPartsOfFrame(augXZ, null, null, qMatrix.numRows()).doAll(qMatrix); // copy Q matrix from augXZ to qMatrix
         _state.set_beta_HGLM(start_delta, 0, betaLength, true); // save new fixed/random coefficients to _state
         _state.set_ubeta_HGLM(start_delta, betaLength, ubetaLength);
@@ -920,12 +923,21 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
       return sumEtaInfo;
     }
     
-    public double[] calculate_all_beta(double[] start_delta, Frame augXZ, Frame augZW, int totRandCatLevels) {
+    public void copyOver(double[][] cholR, double[][] cholRcopy) {
+      int dim1 = cholR.length;
+      int dim2 = cholR[0].length;
+      for (int index=0; index < dim1; index++)
+        System.arraycopy(cholR[index], 0, cholRcopy[index], 0, dim2);
+    }
+    
+    public double[] calculate_all_beta(double[] start_delta, Frame augXZ, Frame augZW, int totRandCatLevels, 
+                                       double[][] cholRcopy) {
       // perform QR decomposition on augXZ and store R as a double[][] array, Q back in augXZ
       DataInfo augXZInfo = new DataInfo(augXZ, null, true, DataInfo.TransformType.NONE,
               true, false, false);
       DKV.put(augXZInfo._key, augXZInfo);
       double[][] cholR = ArrayUtils.transpose(LinearAlgebraUtils.computeQInPlace(_job._key, augXZInfo));
+      copyOver(cholR, cholRcopy); // copy over R matrix
       Frame qTransposed = DMatrix.transpose(augXZ); // transpose Q (stored in Q) and store in qTransposed
       // generate a Frame AugzxW as a new frame of size row 1, cols nrow+random column number
       new CalculateAugZW(_job, _dinfo, _parms, _state.get_priorw_wpsi(), totRandCatLevels,
@@ -980,6 +992,7 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
       // inside _dinfo.response, we have response, wdata, augZ, etaOld, random Columns
       Frame constXYWeight = new Frame(makeZeroOrOneFrame(_dinfo._adaptedFrame.numRows(), 3, 1,
               new String[]{"response", "X", "weights"}));
+      Frame hvDataOnly = makeZeroOrOneFrame(_dinfo._adaptedFrame.numRows(), 1, 0, new String[]{"hv_data"});
       DKV.put(constXYWeight._key, constXYWeight);
       int[] dinfoWCol = _dinfo._weights?new int[]{_dinfo.responseChunkId(0), _dinfo.responseChunkId(2), 
               _dinfo.responseChunkId(3), _dinfo.weightChunkId()}:new int[]{_dinfo.responseChunkId(0), 
@@ -1002,16 +1015,17 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
       GLMModel fixedModel;
       GLMModel[] randModels = new GLMModel[numRandCols];
       updateProgress(false);  // update progress for HGLM
+      double[][] cholR = new double[augXZ.numCols()][augXZ.numCols()];
 
       do {
         sumEtaInfo = fitCoeffs(randCatLevels, totRandCatLevels, glmmmeReturnFrame, dinfoWCol, wCol, 
-                5, 3, sumEtaInfo, augXZ, calculateAugXZ);  // loop to fit fixed/random coeffs
+                5, 3, sumEtaInfo, augXZ, calculateAugXZ, cholR);  // loop to fit fixed/random coeffs
         fixedModel = fitDataDispersion(glmmmeReturnFrame, constXYWeight, devHvColIdx, VC1);
         estimateRandomCoeffCh(glmmmeReturnFrame, devHvColIdx, cumSumRandLevels, numRandCols, numDataRows, randModels, VC2);
       } while (progressHGLMGLMMME(sumEtaInfo[0], sumEtaInfo[1], iter, false, fixedModel, randModels, 
-              glmmmeReturnFrame, VC1, VC2));
+              glmmmeReturnFrame, hvDataOnly, VC1, VC2));
       // for a scoring metrics here while we still have all the relevant info.
-      scoreAndUpdateModelHGLM(fixedModel, randModels, glmmmeReturnFrame, VC1, VC2, sumEtaInfo[0], sumEtaInfo[1]);
+      scoreAndUpdateModelHGLM(fixedModel, randModels, glmmmeReturnFrame, hvDataOnly, VC1, VC2, sumEtaInfo[0], sumEtaInfo[1]);
       cleanupHGLMMemory(null, new Frame[]{glmmmeReturnFrame, constXYWeight}, null);
       System.out.println("Wow");
     }
@@ -1532,8 +1546,9 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
      * @param randModels
      * @param glmmmeReturns
      */
-    private void scoreAndUpdateModelHGLM(GLMModel fixedModel, GLMModel[] randModels, Frame glmmmeReturns, double[] VC1,
-                                         double[][] VC2, double sumDiff2, double convergence) {
+    private void scoreAndUpdateModelHGLM(GLMModel fixedModel, GLMModel[] randModels, Frame glmmmeReturns, 
+                                         Frame hvDataOnly, double[] VC1, double[][] VC2, double sumDiff2, 
+                                         double convergence) {
       Log.info(LogMsg("Scoring after " + timeSinceLastScoring() + "ms"));
       long t1 = System.currentTimeMillis();
       Frame train = DKV.<Frame>getGet(_parms._train); // need to keep this frame to get scoring metrics back
@@ -1541,9 +1556,21 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
       ModelMetrics.MetricBuilder mb = _model.makeMetricBuilder(domain);
       ModelMetricsHGLM.MetricBuilderHGLM mmHGLMBd = (ModelMetricsHGLM.MetricBuilderHGLM) (((GLMMetricBuilder) mb)._metricBuilder);
       updateSimpleHGLMMetrics(fixedModel, randModels, VC1, VC2, mmHGLMBd, sumDiff2, convergence);
+      calBad(glmmmeReturns, hvDataOnly, mmHGLMBd);
       System.out.println("Whoa");
       mb.makeModelMetrics(_model, train, _dinfo._adaptedFrame, null);  // add generated metric to DKV
       scoreEnd(train, t1);
+    }
+    
+    private void calBad(Frame glmmeReturns, Frame hvFrameOnly, ModelMetricsHGLM.MetricBuilderHGLM mmHGLMBd) {
+      new ExtractFrameFromSource(glmmeReturns, new int[]{1}, 0, _nobs).doAll(hvFrameOnly);  // generate frame to build glm model
+      Vec vec = hvFrameOnly.vec(0);
+      double sigma6 = vec.mean()+6*vec.sigma();
+      double maxVec = vec.max();
+      if (maxVec > sigma6) {
+         mmHGLMBd._bad = (new FindMaxIndex(0, maxVec).doAll(hvFrameOnly))._maxIndex;
+      } else
+        mmHGLMBd._bad=-1;
     }
     
     private void updateSimpleHGLMMetrics(GLMModel fixedModel, GLMModel[] randModels, double[] VC1, double[][] VC2, 
@@ -1861,13 +1888,13 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
     }
 
     public boolean progressHGLMGLMMME(double sumDiff2, double sumeta2, int iteration, boolean atGLMMME, GLMModel 
-            fixedModel, GLMModel[] randModels, Frame glmmmeReturns, double[] VC1, double[][] VC2) {
+            fixedModel, GLMModel[] randModels, Frame glmmmeReturns, Frame hvDataOnly, double[] VC1, double[][] VC2) {
       boolean converged = (sumDiff2 < (_parms._objective_epsilon*sumeta2));
       if (atGLMMME)
         _state._iterHGLM_GLMMME++;
       else {
         _state._iter++;
-        updateProgress(fixedModel, randModels, glmmmeReturns, VC1, VC2, sumDiff2, sumDiff2/sumeta2,true);
+        updateProgress(fixedModel, randModels, glmmmeReturns, hvDataOnly, VC1, VC2, sumDiff2, sumDiff2/sumeta2,true);
       }
       return !stop_requested() && !converged && (iteration < _parms._max_iterations);
     }
@@ -1884,12 +1911,12 @@ public class GLM extends ModelBuilder<GLMModel,GLMParameters,GLMOutput> {
 
     private transient long _scoringInterval = SCORING_INTERVAL_MSEC;
 
-    protected void updateProgress(GLMModel fixedModel, GLMModel[] randModels, Frame glmmmeReturns, double[] VC1, 
-                                  double[][] VC2, double sumDiff2, double convergence, boolean canScore) {
+    protected void updateProgress(GLMModel fixedModel, GLMModel[] randModels, Frame glmmmeReturns, Frame hvDataOnly, 
+                                  double[] VC1, double[][] VC2, double sumDiff2, double convergence, boolean canScore) {
       _sc.addIterationScore(_state._iter, _state._sumEtaSquareConvergence, _state._likelihoodInfo);
       if(canScore && (_parms._score_each_iteration || timeSinceLastScoring() > _scoringInterval)) {
         _model.update(_state.expandBeta(_state.beta()), -1, -1, _state._iter);
-        scoreAndUpdateModelHGLM(fixedModel, randModels, glmmmeReturns, VC1, VC2, sumDiff2, convergence);
+        scoreAndUpdateModelHGLM(fixedModel, randModels, glmmmeReturns, hvDataOnly, VC1, VC2, sumDiff2, convergence);
       }
     }
     // update user visible progress

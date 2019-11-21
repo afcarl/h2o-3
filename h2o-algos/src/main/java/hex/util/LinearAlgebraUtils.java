@@ -48,7 +48,6 @@ public class LinearAlgebraUtils {
     }
     return res;
   }
-
   /*
    * Impute missing values and transform numeric value x in col of dinfo._adaptedFrame
    */
@@ -136,6 +135,36 @@ public class LinearAlgebraUtils {
       eigenvectors[i] = eigenPairs[i].eigenvector;
     }
     return eigenvectors;
+  }
+  
+  public static class FindMaxIndex extends MRTask<FindMaxIndex> {
+    public long _maxIndex = -1;
+    int _colIndex;
+    double _maxValue;
+    
+    public FindMaxIndex(int colOfInterest, double maxValue) {
+      _colIndex = colOfInterest;
+      _maxValue = maxValue;
+    }
+    
+    @Override
+    public void map(Chunk[] cs) {
+      int rowLen = cs[0].len();
+      long startRowIndex = cs[0].start();
+      for (int rowIndex=0; rowIndex < rowLen; rowIndex++) {
+        double rowVal = cs[_colIndex].atd(rowIndex);
+        if (rowVal == _maxValue) {
+          _maxIndex = startRowIndex+rowIndex;
+        }
+      }
+    }
+    
+    @Override public void reduce(FindMaxIndex other) {
+      if (this._maxIndex < 0)
+        this._maxIndex = other._maxIndex;
+      else if (this._maxIndex > other._maxIndex)
+        this._maxIndex = other._maxIndex; 
+    }
   }
   
   public static class CopyQtoQMatrix extends MRTask<CopyQtoQMatrix> {

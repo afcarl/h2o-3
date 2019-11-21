@@ -2028,6 +2028,10 @@ public abstract class GLMTask  {
       return devVal;
     }
   }
+  
+  public static class ExtractHV extends MRTask<ExtractHV> {
+    
+  }
 
   // generate AugZ*W as a double array 
   public static class CalculateAugZW extends MRTask<CalculateAugZW> {

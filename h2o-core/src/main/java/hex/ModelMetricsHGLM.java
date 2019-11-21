@@ -8,7 +8,7 @@ import java.util.Arrays;
 public class ModelMetricsHGLM extends ModelMetricsSupervised {
   public final double[] _seFe;       // standard error of fixed predictors/effects
   public final double[] _seRe;       // standard error of random effects
-  public final double[] _fixef;     // fixed coefficients
+  public final double[] _fixedf;     // fixed coefficients
   public final double[] _ranef;       // random coefficients
   public final int _nRandC;           // number of random columns in Z
   public final double _varFix;       // dispersion parameter of the mean model (residual variance for LMM)
@@ -48,7 +48,7 @@ public class ModelMetricsHGLM extends ModelMetricsSupervised {
     _sumEtaDiffSquare = sumEtaDiffSq;
     _convergence = convergence;
     _nRandC = randC;
-    _fixef = fixef;
+    _fixedf = fixef;
     _ranef = ranef;
     _iterations = iter;
   }
